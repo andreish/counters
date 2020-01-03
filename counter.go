@@ -47,6 +47,7 @@ type Counter interface {
 	Value() int64
 }
 
+//Counters interface
 type Counters interface {
 	Get(string) Counter
 	Min(string) MaxMinValue
@@ -55,7 +56,7 @@ type Counters interface {
 	GetCounter(string) Counter
 	GetMin(string) MaxMinValue
 	GetMax(string) MaxMinValue
-	WriteTo(w io.Writer)
+	WriteTo(w io.Writer) (int64, error)
 	Prefix() string
 	String() string
 }
@@ -77,23 +78,27 @@ func NewCounterBox() *CounterBox {
 	}
 }
 
+//New constructor
 func New() Counters {
 	return NewCounterBox()
 }
 
-// CreateHttpHandler creates a simple handler printing values of all counters.
-func (c *CounterBox) CreateHttpHandler() http.HandlerFunc {
+// CreateHTTPHandler creates a simple handler printing values of all counters.
+func (c *CounterBox) CreateHTTPHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) { c.WriteTo(w) }
 }
 
+// Get impl
 func (c *CounterBox) Get(name string) Counter {
 	return c.GetCounter(name)
 }
 
+// Min impl
 func (c *CounterBox) Min(name string) MaxMinValue {
 	return c.GetMin(name)
 }
 
+// Max impl
 func (c *CounterBox) Max(name string) MaxMinValue {
 	return c.GetMax(name)
 }
@@ -104,6 +109,7 @@ type prefixed struct {
 	prefix string
 }
 
+//WithPrefix impl
 func (c *CounterBox) WithPrefix(name string) Counters {
 	return &prefixed{
 		CounterBox{
@@ -115,6 +121,7 @@ func (c *CounterBox) WithPrefix(name string) Counters {
 		name}
 }
 
+//Prefix impl
 func (c *CounterBox) Prefix() string {
 	return ""
 }
@@ -192,7 +199,8 @@ var tmpl = template.Must(template.New("main").Parse(`== Counters ==
 {{- end -}}
 `))
 
-func (c *CounterBox) WriteTo(w io.Writer) {
+//WriteTo  impl
+func (c *CounterBox) WriteTo(w io.Writer) (int64, error) {
 	data := &struct {
 		Counters []Counter
 		Min      []MaxMinValue
@@ -220,12 +228,25 @@ func (c *CounterBox) WriteTo(w io.Writer) {
 	sort.Slice(data.Min, func(i, j int) bool { return strings.Compare(data.Min[i].Name(), data.Min[j].Name()) < 0 })
 	sort.Slice(data.Max, func(i, j int) bool { return strings.Compare(data.Max[i].Name(), data.Max[j].Name()) < 0 })
 	tmpl.Execute(w, data)
+	return 0, nil
 }
 
 func (c *CounterBox) String() string {
 	buf := &bytes.Buffer{}
 	c.WriteTo(buf)
 	return buf.String()
+}
+
+//Names impl
+func (c *CounterBox) Names() []string {
+	data := make([]string, 0)
+	c.counters.Range(func(key interface{}, value interface{}) bool {
+		if value, ok := value.(Counter); ok {
+			data = append(data, value.Name())
+		}
+		return true
+	})
+	return data
 }
 
 type counterImpl struct {
@@ -305,10 +326,12 @@ func (m *minImpl) Value() int64 {
 	return atomic.LoadInt64(&m.value)
 }
 
+//TrivialLogger logger interface
 type TrivialLogger interface {
 	Print(...interface{})
 }
 
+//InitCountersOnSignal impl
 func InitCountersOnSignal(logger TrivialLogger, box Counters) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -325,6 +348,7 @@ func InitCountersOnSignal(logger TrivialLogger, box Counters) {
 	}()
 }
 
+//LogCountersEvery impl
 func LogCountersEvery(logger TrivialLogger, box Counters, d time.Duration) {
 	go func() {
 		t := time.NewTicker(d)

@@ -9,8 +9,9 @@ import (
 	"net/http"
 	"time"
 
+	//	"github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/orian/counters"
-	"github.com/sirupsen/logrus"
 )
 
 var globalBox *counters.CounterBox
@@ -61,6 +62,10 @@ func WriteTo(w io.Writer) {
 
 func String() string {
 	return globalBox.String()
+}
+
+func Names() []string {
+	return globalBox.Names()
 }
 
 func LogrusOnSignal() {
